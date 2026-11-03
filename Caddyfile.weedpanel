@@ -1,0 +1,7 @@
+# Add this site block to the existing Caddyfile. Do not replace other sites.
+# Assumes the existing (cf_tls) snippet and the separ-deploy_web Docker network.
+weed.nuviraa.net {
+    import cf_tls
+    encode zstd gzip
+    reverse_proxy frontend:80
+}
