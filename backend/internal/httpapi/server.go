@@ -438,12 +438,23 @@ func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	dir := safeFilerPath(r.URL.Query().Get("path"))
 	target := filerTarget(c.FilerURL, strings.TrimRight(dir, "/")+"/"+name)
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, http.MaxBytesReader(w, r.Body, 64<<20))
+	// The Filer only accepts multipart/form-data on POST, so wrap the raw body.
+	body, contentType, err := buildFilerUpload(name, r.Header.Get("Content-Type"), http.MaxBytesReader(w, r.Body, 64<<20))
+	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, "file_too_large", "File exceeds the 64 MiB upload limit")
+			return
+		}
+		writeError(w, 400, "invalid_request", "could not read upload")
+		return
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, body)
 	if err != nil {
 		writeError(w, 400, "invalid_request", "invalid upload")
 		return
 	}
-	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+	req.Header.Set("Content-Type", contentType)
 	resp, err := (&http.Client{Timeout: 2 * time.Minute}).Do(req)
 	if err != nil {
 		writeError(w, 502, "filer_unavailable", err.Error())
